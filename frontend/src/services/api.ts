@@ -10,24 +10,27 @@ const api = axios.create({
   },
 });
 
-// Add auth token to requests
+// Add auth token to requests (temporarily disabled for demo)
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  // Temporarily comment out auth for demo mode
+  // if (token) {
+  //   config.headers.Authorization = `Bearer ${token}`;
+  // }
   return config;
 });
 
-// Handle auth errors
+// Handle auth errors (temporarily disabled for demo)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
+    // Temporarily disable auth redirect for demo mode
+    // if (error.response?.status === 401) {
+    //   localStorage.removeItem('token');
+    //   localStorage.removeItem('user');
+    //   window.location.href = '/login';
+    // }
+    console.error('API Error:', error);
     return Promise.reject(error);
   }
 );
@@ -49,11 +52,11 @@ export const authAPI = {
 
 // Dashboard API calls
 export const dashboardAPI = {
-  getDashboardData: () => api.get('/dashboard'),
+  getDashboardData: () => api.get('/aws/usage/summary'),
   
-  getRecommendations: () => api.get('/recommendations'),
+  getRecommendations: () => api.get('/aws/recommendations'),
   
-  applyRecommendation: (id: string) => api.post(`/recommendations/${id}/apply`)
+  applyRecommendation: (id: string) => api.post(`/aws/recommendations/${id}/implement`)
 };
 
 // Data API calls

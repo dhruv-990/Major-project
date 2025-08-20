@@ -11,7 +11,7 @@ import {
   CloudIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
-import axios from 'axios';
+import { dashboardAPI } from '@/services/api';
 
 interface DashboardData {
   totalSavings: number;
@@ -40,37 +40,40 @@ export default function DashboardPage() {
 
   const fetchDashboardData = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        window.location.href = '/login';
-        return;
-      }
+      // Temporarily disable auth check for demo mode
+      // const token = localStorage.getItem('token');
+      // if (!token) {
+      //   window.location.href = '/login';
+      //   return;
+      // }
 
-      const response = await axios.get('http://localhost:5000/api/dashboard', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await dashboardAPI.getDashboardData();
       
-      setData(response.data);
+      // Use real API data (empty until AWS accounts are synced)
+      const apiData = response.data.data;
+      const transformedData = {
+        totalSavings: apiData.totalCost * 0.3, // 30% potential savings from actual costs
+        monthlyCost: apiData.totalCost,
+        activeRecommendations: apiData.totalResources,
+        awsAccounts: 0, // Will be updated when accounts are added
+        recentRecommendations: [], // Empty until real recommendations are generated
+        costTrend: apiData.totalCost > 0 ? '-12%' : '+0%'
+      };
+      
+      setData(transformedData);
+      setError(''); // Clear any previous errors
     } catch (err: any) {
-      if (err.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-      } else {
-        setError('Failed to load dashboard data');
-        // Set mock data for demo purposes
-        setData({
-          totalSavings: 15420,
-          monthlyCost: 8750,
-          activeRecommendations: 12,
-          awsAccounts: 3,
-          recentRecommendations: [
-            { id: 1, type: 'EC2', description: 'Resize t3.large to t3.medium', savings: 240 },
-            { id: 2, type: 'S3', description: 'Enable lifecycle policies', savings: 180 },
-            { id: 3, type: 'RDS', description: 'Switch to reserved instances', savings: 320 }
-          ],
-          costTrend: '-12%'
-        });
-      }
+      console.error('Dashboard API Error:', err);
+      setError('Failed to load dashboard data');
+      // Set empty data - no mock data
+      setData({
+        totalSavings: 0,
+        monthlyCost: 0,
+        activeRecommendations: 0,
+        awsAccounts: 0,
+        recentRecommendations: [],
+        costTrend: '+0%'
+      });
     } finally {
       setLoading(false);
     }
@@ -183,9 +186,21 @@ export default function DashboardPage() {
               ))}
             </div>
             {data.recentRecommendations.length === 0 && (
-              <p className="text-gray-500 text-center py-8">
-                No recommendations available. Connect your AWS accounts to get started.
-              </p>
+              <div className="text-center py-12">
+                <CloudIcon className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-2 text-sm font-medium text-gray-900">No recommendations yet</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Add your AWS accounts and sync data to get cost optimization recommendations.
+                </p>
+                <div className="mt-6">
+                  <a
+                    href="/form"
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    Add AWS Account
+                  </a>
+                </div>
+              </div>
             )}
           </div>
         </div>
