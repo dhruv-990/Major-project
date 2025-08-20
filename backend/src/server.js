@@ -1,61 +1,75 @@
 // server.js
-import express from "express";
-import dotenv from "dotenv";
-import mongoose from "mongoose";
-import cors from "cors";
+import express from 'express';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 // Load environment variables
 dotenv.config();
-console.log("NODE_ENV:", process.env.NODE_ENV);
-console.log("MONGO_URI:", process.env.MONGO_URI);
-console.log("MONGODB_URI_PROD:", process.env.MONGODB_URI_PROD);
 
+// For now, let's create simplified routes inline since the route files use CommonJS
+// We'll fix the route imports after converting them to ES modules
 
 const app = express();
 
-// Middleware
-app.use(express.json());
-app.use(cors());
+// Security middleware
+app.use(helmet());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
+app.use(limiter);
+
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 
 // Environment variables
 const PORT = process.env.PORT || 5000;
-const NODE_ENV = process.env.NODE_ENV || "development";
-const MONGO_URI =
-  NODE_ENV === "production"
-    ? process.env.MONGODB_URI_PROD
-    : process.env.MONGO_URI;
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const MONGO_URI = NODE_ENV === 'production' 
+  ? process.env.MONGODB_URI_PROD 
+  : process.env.MONGO_URI || 'mongodb://localhost:27017/cloud-optimizer';
 
-// MongoDB Connection (optional for demo)
-if (MONGO_URI && MONGO_URI !== 'undefined') {
-  mongoose
-    .connect(MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    })
-    .then(() => console.log(`✅ MongoDB Connected: ${MONGO_URI}`))
-    .catch((err) => {
-      console.warn("⚠️ MongoDB connection failed, running in demo mode:", err.message);
-    });
-} else {
-  console.log("🔄 Running in demo mode without MongoDB");
-}
+// MongoDB Connection
+mongoose.connect(MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => {
+  console.log(`✅ MongoDB Connected: ${MONGO_URI}`);
+})
+.catch((err) => {
+  console.error('❌ MongoDB connection error:', err.message);
+  process.exit(1);
+});
 
-// Basic auth routes (simplified for testing)
+// Temporary inline routes until we convert route files to ES modules
+// Auth routes
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { firstName, lastName, email, password } = req.body;
     
-    if (!username || !email || !password) {
+    if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide username, email, and password'
+        message: 'Please provide all required fields'
       });
     }
 
     // For demo purposes, create a mock user
     const mockUser = {
       _id: Date.now().toString(),
-      username,
+      firstName,
+      lastName,
       email,
       role: 'user'
     };
@@ -90,7 +104,8 @@ app.post('/api/auth/login', async (req, res) => {
     // For demo purposes, accept any credentials
     const mockUser = {
       _id: Date.now().toString(),
-      username: 'Demo User',
+      firstName: 'Demo',
+      lastName: 'User',
       email,
       role: 'user'
     };
@@ -111,79 +126,114 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Dashboard endpoint
-app.get('/api/dashboard', (req, res) => {
-  res.json({
-    totalSavings: 15420,
-    monthlyCost: 8750,
-    activeRecommendations: 12,
-    awsAccounts: 3,
-    recentRecommendations: [
-      { id: 1, type: 'EC2', description: 'Resize t3.large to t3.medium', savings: 240 },
-      { id: 2, type: 'S3', description: 'Enable lifecycle policies', savings: 180 },
-      { id: 3, type: 'RDS', description: 'Switch to reserved instances', savings: 320 }
-    ],
-    costTrend: '-12%'
-  });
+// Real AWS usage summary from database
+app.get('/api/aws/usage/summary', async (req, res) => {
+  try {
+    // For now, return empty data since no real AWS data has been synced
+    // This will be populated when users sync their AWS accounts
+    res.json({
+      success: true,
+      data: {
+        summary: [],
+        period: { start: new Date(Date.now() - 30*24*60*60*1000), end: new Date() },
+        totalResources: 0,
+        totalCost: 0
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch usage summary',
+      error: error.message
+    });
+  }
 });
 
-// Data endpoint
-app.get('/api/data', (req, res) => {
-  res.json([
-    {
-      id: '1',
-      service: 'EC2',
-      resourceId: 'i-1234567890abcdef0',
-      cost: 245.50,
-      usage: { cpu: 15, memory: 45, storage: 100 },
-      region: 'us-east-1',
-      lastUpdated: '2024-01-15T10:30:00Z',
-      status: 'active'
-    },
-    {
-      id: '2',
-      service: 'S3',
-      resourceId: 'my-bucket-name',
-      cost: 89.25,
-      usage: { storage: 500 },
-      region: 'us-west-2',
-      lastUpdated: '2024-01-15T09:15:00Z',
-      status: 'optimized'
-    }
-  ]);
+app.get('/api/data', async (req, res) => {
+  try {
+    // Return empty array since no real AWS data has been synced yet
+    // This will be populated when users sync their AWS accounts
+    res.json([]);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch data',
+      error: error.message
+    });
+  }
 });
 
-// AWS accounts endpoint
+app.get('/api/aws-accounts', async (req, res) => {
+  try {
+    // Return empty array since no AWS accounts have been added yet
+    // This will be populated when users add their AWS accounts
+    res.json([]);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch AWS accounts',
+      error: error.message
+    });
+  }
+});
+
 app.post('/api/aws-accounts', (req, res) => {
   res.status(201).json({
     success: true,
     message: 'AWS account added successfully',
     data: {
       id: Date.now().toString(),
-      ...req.body
+      ...req.body,
+      status: 'connected',
+      lastSync: new Date().toISOString()
     }
   });
 });
 
-app.get('/api/aws-accounts', (req, res) => {
-  res.json([
-    {
-      id: '1',
-      accountName: 'Production Account',
-      accountId: '123456789012',
-      region: 'us-east-1',
-      status: 'connected',
-      lastSync: '2024-01-15T10:30:00Z'
-    }
-  ]);
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: NODE_ENV,
+    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+  });
 });
 
-// Sample route
-app.get("/", (req, res) => {
-  res.send(`Server is running in ${NODE_ENV} mode 🚀`);
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: `AWS Cost Optimizer API - ${NODE_ENV} mode 🚀`,
+    version: '1.0.0',
+    endpoints: {
+      auth: '/api/auth',
+      aws: '/api/aws',
+      health: '/api/health'
+    }
+  });
+});
+
+// Simple error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Something went wrong!',
+    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+  });
+});
+
+// Handle 404 routes
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.originalUrl} not found`
+  });
 });
 
 // Start server
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`📊 Environment: ${NODE_ENV}`);
+  console.log(`🔗 API Documentation: http://localhost:${PORT}/api/health`);
 });

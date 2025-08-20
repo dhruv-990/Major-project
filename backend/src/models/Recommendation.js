@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const recommendationSchema = new mongoose.Schema({
   userId: {
@@ -224,4 +224,4 @@ recommendationSchema.methods.dismiss = function(userId, reason) {
   return this.save();
 };
 
-module.exports = mongoose.model('Recommendation', recommendationSchema); 
+export default mongoose.model('Recommendation', recommendationSchema); 

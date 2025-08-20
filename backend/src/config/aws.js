@@ -1,4 +1,4 @@
-const AWS = require('aws-sdk');
+import AWS from 'aws-sdk';
 
 // Configure AWS SDK
 const configureAWS = (credentials = null) => {
@@ -48,7 +48,7 @@ const getCloudWatchLogsClient = (credentials = null) => {
   return new AWS.CloudWatchLogs();
 };
 
-module.exports = {
+export {
   configureAWS,
   getEC2Client,
   getS3Client,
@@ -56,4 +56,4 @@ module.exports = {
   getCloudWatchClient,
   getCostExplorerClient,
   getCloudWatchLogsClient
-}; 
+};

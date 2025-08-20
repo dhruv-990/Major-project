@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const awsUsageSchema = new mongoose.Schema({
   userId: {
@@ -218,4 +218,4 @@ awsUsageSchema.statics.getCostTrends = function(userId, days = 30) {
   ]);
 };
 
-module.exports = mongoose.model('AWSUsage', awsUsageSchema); 
+export default mongoose.model('AWSUsage', awsUsageSchema); 

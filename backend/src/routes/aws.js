@@ -11,6 +11,13 @@ const {
   getCloudWatchClient, 
   getCostExplorerClient 
 } = require('../config/aws');
+const {
+  syncEC2DataEnhanced,
+  syncS3DataEnhanced,
+  syncRDSDataEnhanced,
+  generateRecommendations
+} = require('../utils/enhancedAwsDataSync');
+const User = require('../models/User');
 
 const router = express.Router();
 
@@ -415,12 +422,19 @@ router.put('/recommendations/:id/dismiss', asyncHandler(async (req, res) => {
   }
 }));
 
-// @desc    Sync AWS data (placeholder for future implementation)
+// @desc    Sync AWS data with real metrics and costs
 // @route   POST /api/aws/sync
 // @access  Private
 router.post('/sync', asyncHandler(async (req, res) => {
-  const { awsAccountId } = req.body;
+  const { awsAccountId, services = ['EC2', 'S3', 'RDS'] } = req.body;
   const userId = req.user._id;
+
+  if (!awsAccountId) {
+    return res.status(400).json({
+      success: false,
+      message: 'AWS account ID is required'
+    });
+  }
 
   try {
     // Find user's AWS account
@@ -434,24 +448,183 @@ router.post('/sync', asyncHandler(async (req, res) => {
       });
     }
 
-    // TODO: Implement actual AWS data sync
-    // This is a placeholder for the actual AWS SDK integration
-    res.json({
+    // Prepare AWS credentials
+    const credentials = {
+      accessKeyId: awsAccount.accessKeyId,
+      secretAccessKey: awsAccount.secretAccessKey,
+      region: awsAccount.region || 'us-east-1'
+    };
+
+    const syncResults = {
       success: true,
-      message: 'AWS data sync initiated',
+      message: 'AWS data sync completed',
       data: {
         awsAccountId,
-        syncStatus: 'initiated',
-        estimatedTime: '5-10 minutes'
+        syncedServices: [],
+        errors: [],
+        totalResourcesSynced: 0
       }
-    });
+    };
+
+    // Sync EC2 data
+    if (services.includes('EC2')) {
+      try {
+        const ec2Result = await syncEC2DataEnhanced(credentials, userId, awsAccountId);
+        syncResults.data.syncedServices.push({
+          service: 'EC2',
+          ...ec2Result
+        });
+        syncResults.data.totalResourcesSynced += ec2Result.instancesSynced || 0;
+      } catch (ec2Error) {
+        console.error('EC2 sync error:', ec2Error);
+        syncResults.data.errors.push({
+          service: 'EC2',
+          error: ec2Error.message
+        });
+      }
+    }
+
+    // Sync S3 data
+    if (services.includes('S3')) {
+      try {
+        const s3Result = await syncS3DataEnhanced(credentials, userId, awsAccountId);
+        syncResults.data.syncedServices.push({
+          service: 'S3',
+          ...s3Result
+        });
+        syncResults.data.totalResourcesSynced += s3Result.bucketsSynced || 0;
+      } catch (s3Error) {
+        console.error('S3 sync error:', s3Error);
+        syncResults.data.errors.push({
+          service: 'S3',
+          error: s3Error.message
+        });
+      }
+    }
+
+    // Sync RDS data
+    if (services.includes('RDS')) {
+      try {
+        const rdsResult = await syncRDSDataEnhanced(credentials, userId, awsAccountId);
+        syncResults.data.syncedServices.push({
+          service: 'RDS',
+          ...rdsResult
+        });
+        syncResults.data.totalResourcesSynced += rdsResult.instancesSynced || 0;
+      } catch (rdsError) {
+        console.error('RDS sync error:', rdsError);
+        syncResults.data.errors.push({
+          service: 'RDS',
+          error: rdsError.message
+        });
+      }
+    }
+
+    // Generate recommendations after sync
+    try {
+      const recommendationsResult = await generateRecommendations(userId, awsAccountId);
+      syncResults.data.recommendationsGenerated = recommendationsResult.recommendationsGenerated;
+    } catch (recError) {
+      console.error('Recommendations generation error:', recError);
+      syncResults.data.errors.push({
+        service: 'Recommendations',
+        error: recError.message
+      });
+    }
+
+    // Update sync status based on results
+    if (syncResults.data.errors.length > 0 && syncResults.data.syncedServices.length === 0) {
+      syncResults.success = false;
+      syncResults.message = 'AWS data sync failed for all services';
+    } else if (syncResults.data.errors.length > 0) {
+      syncResults.message = 'AWS data sync completed with some errors';
+    }
+
+    res.json(syncResults);
   } catch (error) {
+    console.error('Sync error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to initiate AWS data sync',
+      message: 'Failed to sync AWS data',
       error: error.message
     });
   }
 }));
 
-module.exports = router; 
+// @desc    Sync specific AWS service
+// @route   POST /api/aws/sync/:service
+// @access  Private
+router.post('/sync/:service', asyncHandler(async (req, res) => {
+  const { service } = req.params;
+  const { awsAccountId } = req.body;
+  const userId = req.user._id;
+
+  const validServices = ['EC2', 'S3', 'RDS'];
+  if (!validServices.includes(service.toUpperCase())) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid service. Valid services are: ${validServices.join(', ')}`
+    });
+  }
+
+  if (!awsAccountId) {
+    return res.status(400).json({
+      success: false,
+      message: 'AWS account ID is required'
+    });
+  }
+
+  try {
+    // Find user's AWS account
+    const user = await User.findById(userId);
+    const awsAccount = user.awsAccounts.find(account => account._id.toString() === awsAccountId);
+
+    if (!awsAccount) {
+      return res.status(404).json({
+        success: false,
+        message: 'AWS account not found'
+      });
+    }
+
+    // Prepare AWS credentials
+    const credentials = {
+      accessKeyId: awsAccount.accessKeyId,
+      secretAccessKey: awsAccount.secretAccessKey,
+      region: awsAccount.region || 'us-east-1'
+    };
+
+    let result;
+    const serviceUpper = service.toUpperCase();
+
+    switch (serviceUpper) {
+      case 'EC2':
+        result = await syncEC2DataEnhanced(credentials, userId, awsAccountId);
+        break;
+      case 'S3':
+        result = await syncS3DataEnhanced(credentials, userId, awsAccountId);
+        break;
+      case 'RDS':
+        result = await syncRDSDataEnhanced(credentials, userId, awsAccountId);
+        break;
+    }
+
+    res.json({
+      success: true,
+      message: `${serviceUpper} data sync completed`,
+      data: {
+        service: serviceUpper,
+        awsAccountId,
+        ...result
+      }
+    });
+  } catch (error) {
+    console.error(`${service} sync error:`, error);
+    res.status(500).json({
+      success: false,
+      message: `Failed to sync ${service} data`,
+      error: error.message
+    });
+  }
+}));
+
+module.exports = router;
