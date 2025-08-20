@@ -1,9 +1,9 @@
-const express = require('express');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const { protect, authorize } = require('../middleware/authMiddleware');
-const { validate } = require('../middleware/validationMiddleware');
-const { asyncHandler } = require('../middleware/errorMiddleware');
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
+import { protect, authorize } from '../middleware/authMiddleware.js';
+import { validate } from '../middleware/validationMiddleware.js';
+import { asyncHandler } from '../middleware/errorMiddleware.js';
 
 const router = express.Router();
 
@@ -357,4 +357,4 @@ router.get('/users', protect, authorize('admin'), asyncHandler(async (req, res) 
   });
 }));
 
-module.exports = router; 
+export default router; 
